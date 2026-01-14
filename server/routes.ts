@@ -18,6 +18,19 @@ import {
   AI_MODEL_ROLES,
 } from "@shared/schema";
 import { z } from "zod";
+import { deliberate, calculateConsensus } from "./ai-deliberation";
+import { 
+  getWalletState, 
+  getBalance, 
+  loadOrCreateWallet 
+} from "./solana-wallet";
+import { 
+  startAutonomousEngine, 
+  stopAutonomousEngine, 
+  getAutonomousDecisions, 
+  getEngineStatus,
+  runAutonomousCycle
+} from "./autonomous-engine";
 
 /**
  * Registers all API routes for the Dev³ application
@@ -333,6 +346,21 @@ export async function registerRoutes(
   });
 
   /**
+   * GET /api/activity
+   * Returns system-generated activity logs
+   * Logs are immutable facts describing executed outcomes only
+   */
+  app.get("/api/activity", async (_req, res) => {
+    try {
+      const logs = await storage.getActivityLogs();
+      res.json(logs);
+    } catch (error) {
+      console.error("Error fetching activity logs:", error);
+      res.status(500).json({ error: "Failed to fetch activity logs" });
+    }
+  });
+
+  /**
    * GET /api/stats
    * Returns aggregated statistics about all decisions
    * 
@@ -396,11 +424,245 @@ export async function registerRoutes(
    * @returns {object} Health status with timestamp
    */
   app.get("/api/health", async (_req, res) => {
+    const engineStatus = getEngineStatus();
     res.json({
       status: "healthy",
       service: "dev3-api",
       timestamp: new Date().toISOString(),
+      autonomousEngine: engineStatus,
     });
+  });
+
+  /**
+   * GET /api/wallet
+   * Returns the Dev³ wallet state and balance
+   */
+  app.get("/api/wallet", async (_req, res) => {
+    try {
+      const { wallet, token } = getWalletState();
+      const balance = await getBalance();
+      res.json({
+        wallet: {
+          publicKey: wallet.publicKey,
+          createdAt: wallet.createdAt,
+        },
+        token,
+        balance,
+      });
+    } catch (error) {
+      console.error("Error fetching wallet:", error);
+      res.status(500).json({ error: "Failed to fetch wallet state" });
+    }
+  });
+
+  /**
+   * GET /api/autonomous/status
+   * Returns the autonomous engine status
+   */
+  app.get("/api/autonomous/status", async (_req, res) => {
+    try {
+      const status = getEngineStatus();
+      const { wallet, token } = getWalletState();
+      const balance = await getBalance();
+      res.json({
+        engine: status,
+        wallet: { publicKey: wallet.publicKey },
+        token,
+        balance,
+      });
+    } catch (error) {
+      console.error("Error fetching autonomous status:", error);
+      res.status(500).json({ error: "Failed to fetch status" });
+    }
+  });
+
+  /**
+   * GET /api/autonomous/decisions
+   * Returns recent autonomous decisions made by Dev³
+   */
+  app.get("/api/autonomous/decisions", async (_req, res) => {
+    try {
+      const decisions = getAutonomousDecisions();
+      res.json(decisions);
+    } catch (error) {
+      console.error("Error fetching autonomous decisions:", error);
+      res.status(500).json({ error: "Failed to fetch decisions" });
+    }
+  });
+
+  /**
+   * POST /api/autonomous/start
+   * Starts the autonomous engine
+   */
+  app.post("/api/autonomous/start", async (_req, res) => {
+    try {
+      startAutonomousEngine(30000);
+      res.json({ message: "Autonomous engine started", interval: 30000 });
+    } catch (error) {
+      console.error("Error starting engine:", error);
+      res.status(500).json({ error: "Failed to start engine" });
+    }
+  });
+
+  /**
+   * POST /api/autonomous/stop
+   * Stops the autonomous engine
+   */
+  app.post("/api/autonomous/stop", async (_req, res) => {
+    try {
+      stopAutonomousEngine();
+      res.json({ message: "Autonomous engine stopped" });
+    } catch (error) {
+      console.error("Error stopping engine:", error);
+      res.status(500).json({ error: "Failed to stop engine" });
+    }
+  });
+
+  /**
+   * POST /api/autonomous/cycle
+   * Manually triggers a single autonomous cycle
+   */
+  app.post("/api/autonomous/cycle", async (_req, res) => {
+    try {
+      const decision = await runAutonomousCycle();
+      res.json(decision);
+    } catch (error) {
+      console.error("Error running cycle:", error);
+      res.status(500).json({ error: "Failed to run cycle" });
+    }
+  });
+
+  /**
+   * POST /api/decisions/:id/deliberate
+   * Automatically triggers all three AI models to deliberate and reach consensus
+   * This is the main automation endpoint - no manual intervention needed
+   * 
+   * @param id - The decision ID
+   * @returns {object} Complete deliberation result with all responses and consensus
+   */
+  app.post("/api/decisions/:id/deliberate", async (req, res) => {
+    try {
+      const decision = await storage.getDecision(req.params.id);
+      if (!decision) {
+        res.status(404).json({ error: "Decision not found" });
+        return;
+      }
+
+      if (decision.status === "consensus_reached") {
+        res.status(400).json({ 
+          error: "Already deliberated", 
+          message: "This decision has already reached consensus",
+          consensus: decision.consensus,
+        });
+        return;
+      }
+
+      console.log(`Starting automatic deliberation for decision: ${decision.title}`);
+      
+      // Get responses from all 3 AI models in parallel
+      const aiResponses = await deliberate(decision);
+      
+      // Save each AI response to storage with validation
+      for (const response of aiResponses) {
+        const validatedResponse = insertAIResponseSchema.parse({
+          decisionId: req.params.id,
+          model: response.model,
+          vote: response.vote,
+          reasoning: response.reasoning,
+          confidence: response.confidence,
+          risks: response.risks,
+          recommendations: response.recommendations,
+        });
+        await storage.addAIResponse(validatedResponse);
+      }
+
+      // Calculate and save consensus
+      const consensusData = calculateConsensus(aiResponses);
+      const consensus = await storage.setConsensus(req.params.id, consensusData);
+
+      // Get updated decision with all data
+      const updatedDecision = await storage.getDecision(req.params.id);
+
+      console.log(`Deliberation complete: ${consensusData.outcome} (${consensusData.unanimity ? "unanimous" : "majority"})`);
+
+      res.status(201).json({
+        decision: updatedDecision,
+        deliberation: {
+          responses: aiResponses,
+          consensus,
+        },
+      });
+    } catch (error) {
+      console.error("Error during deliberation:", error);
+      res.status(500).json({ 
+        error: "Deliberation failed", 
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  /**
+   * POST /api/deliberate
+   * Create a new decision and automatically deliberate in one step
+   * Convenience endpoint for fully automated workflow
+   * 
+   * @body {InsertDecision} - Decision data (title, description, category, priority)
+   * @returns {object} Created decision with all AI responses and consensus
+   */
+  app.post("/api/deliberate", async (req, res) => {
+    try {
+      const validatedData = insertDecisionSchema.parse(req.body);
+      const decision = await storage.createDecision(validatedData);
+      
+      console.log(`Created and starting deliberation for: ${decision.title}`);
+      
+      // Get responses from all 3 AI models in parallel
+      const aiResponses = await deliberate(decision);
+      
+      // Save each AI response to storage with validation
+      for (const response of aiResponses) {
+        const validatedResponse = insertAIResponseSchema.parse({
+          decisionId: decision.id,
+          model: response.model,
+          vote: response.vote,
+          reasoning: response.reasoning,
+          confidence: response.confidence,
+          risks: response.risks,
+          recommendations: response.recommendations,
+        });
+        await storage.addAIResponse(validatedResponse);
+      }
+
+      // Calculate and save consensus
+      const consensusData = calculateConsensus(aiResponses);
+      const consensus = await storage.setConsensus(decision.id, consensusData);
+
+      // Get updated decision with all data
+      const updatedDecision = await storage.getDecision(decision.id);
+
+      console.log(`Deliberation complete: ${consensusData.outcome} (${consensusData.unanimity ? "unanimous" : "majority"})`);
+
+      res.status(201).json({
+        decision: updatedDecision,
+        deliberation: {
+          responses: aiResponses,
+          consensus,
+        },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ 
+          error: "Validation failed", 
+          details: error.errors,
+        });
+      } else {
+        console.error("Error during deliberation:", error);
+        res.status(500).json({ 
+          error: "Deliberation failed", 
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
   });
 
   return httpServer;

@@ -175,6 +175,36 @@ export type InsertDecision = z.infer<typeof insertDecisionSchema>;
 export const updateDecisionSchema = insertDecisionSchema.partial();
 export type UpdateDecision = z.infer<typeof updateDecisionSchema>;
 
+/**
+ * Activity log event types - system-generated actions only
+ * No human entries. No retroactive edits.
+ */
+export const ACTIVITY_TYPES = [
+  "decision_created",
+  "deliberation_started",
+  "deliberation_completed",
+  "consensus_approved",
+  "consensus_rejected",
+  "consensus_needs_revision",
+  "decision_deleted",
+] as const;
+export type ActivityType = (typeof ACTIVITY_TYPES)[number];
+
+/**
+ * Schema for system-generated activity log entries
+ * These are facts, not opinions - describing executed outcomes only
+ */
+export const activityLogSchema = z.object({
+  id: z.string(),
+  type: z.enum(ACTIVITY_TYPES),
+  decisionId: z.string().optional(),
+  decisionTitle: z.string().optional(),
+  outcome: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
+  timestamp: z.string(),
+});
+export type ActivityLog = z.infer<typeof activityLogSchema>;
+
 // Legacy user types (kept for compatibility)
 export const users = undefined;
 export type User = { id: string; username: string; password: string };

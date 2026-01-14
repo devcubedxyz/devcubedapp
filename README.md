@@ -1,308 +1,279 @@
 # Dev³ (Dev Cubed)
 
-## Overview
+**Three AI minds. One token. Zero human intervention.**
 
-Dev³ is a web3 experiment where three independent AI models (Grok, ChatGPT, and Claude) jointly operate as a single developer. Instead of one AI making unilateral decisions, the system implements a consensus-based approach where each AI model has a specialized role:
+Dev³ is a fully autonomous Solana token management system where three independent AI models (Grok, ChatGPT, and Claude) collaboratively manage token operations through consensus-based decision making. The system thinks and acts every 30 seconds with no human input required.
 
-- **Grok**: Risk & Momentum - Handles risk assessment, momentum tracking, and edge detection
-- **ChatGPT**: Structure & Execution - Manages structure, execution logic, and system design
-- **Claude**: Ethics & Restraint - Oversees ethics, restraint, and long-term consistency
+**Website:** [devcubed.xyz](https://devcubed.xyz)
 
-The application allows decisions to be submitted, deliberated upon by all three AI models, and resolved through a consensus mechanism.
+## How It Works
 
-## User Preferences
+### The Three AI Council
 
-Preferred communication style: Simple, everyday language.
+Each AI model has a specialized role in the decision-making process:
+
+| Model | Role | Focus |
+|-------|------|-------|
+| **Grok** (x-ai/grok-3-mini-beta) | Risk & Momentum | Market timing, volatility assessment, edge detection |
+| **ChatGPT** (openai/gpt-4o-mini) | Structure & Execution | Technical feasibility, optimal execution paths |
+| **Claude** (anthropic/claude-3.5-haiku) | Ethics & Restraint | Long-term sustainability, holder protection |
+
+### Consensus Mechanism
+
+The system uses a **2/3 majority voting** system:
+
+- **2/3 Approve (2+ votes)** → Action is executed
+- **2/3 Reject (2+ votes)** → Action is blocked
+- **1/3 Split** → Defaults to HOLD (conservative)
+
+This ensures no single AI can unilaterally make decisions that affect token holders.
+
+### Autonomous Actions
+
+The council can vote on five distinct actions:
+
+| Action | Description | When Used |
+|--------|-------------|-----------|
+| `BUYBACK` | Use treasury SOL to purchase tokens | Bullish market conditions, undervalued token |
+| `BURN` | Permanently remove tokens from circulation | Deflationary pressure needed |
+| `HOLD` | No action taken | Neutral/uncertain conditions |
+| `SELL_PARTIAL` | Sell portion of holdings to build reserves | Risk management, treasury building |
+| `CLAIM_REWARDS` | Collect accumulated creator fees | Regular treasury maintenance |
+
+### Decision Cycle
+
+Every 30 seconds, the system:
+
+1. **Gathers Context** - Wallet balance, token holdings, market data
+2. **AI Deliberation** - All three models analyze the situation independently
+3. **Voting** - Each model votes on the recommended action
+4. **Consensus** - System determines if 2/3 majority exists
+5. **Execution** - If approved, action is executed via PumpPortal API
+6. **Logging** - Decision and outcome recorded immutably
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Dev³ Autonomous Engine                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────┐    ┌─────────┐    ┌─────────┐                 │
+│  │  Grok   │    │ ChatGPT │    │ Claude  │                 │
+│  │  Risk   │    │  Logic  │    │ Ethics  │                 │
+│  └────┬────┘    └────┬────┘    └────┬────┘                 │
+│       │              │              │                       │
+│       └──────────────┼──────────────┘                       │
+│                      │                                      │
+│              ┌───────▼───────┐                              │
+│              │   Consensus   │                              │
+│              │   (2/3 Vote)  │                              │
+│              └───────┬───────┘                              │
+│                      │                                      │
+│              ┌───────▼───────┐                              │
+│              │   Execution   │                              │
+│              │  (PumpPortal) │                              │
+│              └───────────────┘                              │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Tech Stack
+
+- **Runtime:** Node.js 18+ with TypeScript
+- **Frontend:** React + Vite + Tailwind CSS
+- **Backend:** Express.js REST API
+- **Blockchain:** Solana Web3.js
+- **AI Provider:** OpenRouter (unified API for Grok, GPT-4, Claude)
+- **Token Operations:** PumpPortal API
+
+## Project Structure
+
+```
+├── client/                     # React frontend
+│   └── src/
+│       ├── components/         # UI components (shadcn/ui)
+│       ├── pages/              # Route pages
+│       │   ├── Home.tsx        # Manual decision dashboard
+│       │   └── Autonomous.tsx  # Autonomous engine monitor
+│       └── lib/                # Utilities
+├── server/                     # Express backend
+│   ├── index.ts                # Server entry point
+│   ├── autonomous-engine.ts    # Core 30-second decision loop
+│   ├── solana-wallet.ts        # Wallet generation & management
+│   ├── pumpportal.ts           # Trading & creator fee API
+│   ├── ai-deliberation.ts      # AI model integration
+│   ├── routes.ts               # API endpoints
+│   └── storage.ts              # Data persistence layer
+├── shared/                     # Shared types
+│   └── schema.ts               # Zod schemas & TypeScript types
+└── README.md
+```
 
 ## API Reference
 
-### Base URL
-All API endpoints are prefixed with `/api`
+### Wallet & Status
 
-### Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/wallet` | GET | Get wallet address and SOL/token balances |
+| `/api/autonomous/status` | GET | Engine running status, cycle count, stats |
+| `/api/autonomous/decisions` | GET | Recent autonomous decision history |
 
-#### Models
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/models` | Get AI model information and roles |
-| GET | `/api/health` | Health check endpoint |
-| GET | `/api/stats` | Get aggregated statistics |
+### Engine Control
 
-#### Decisions
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/decisions` | Create a new decision |
-| GET | `/api/decisions` | List all decisions |
-| GET | `/api/decisions/:id` | Get a specific decision |
-| PATCH | `/api/decisions/:id` | Update a decision |
-| DELETE | `/api/decisions/:id` | Delete a decision |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/autonomous/start` | POST | Start the autonomous engine |
+| `/api/autonomous/stop` | POST | Stop the autonomous engine |
+| `/api/autonomous/cycle` | POST | Trigger a single decision cycle manually |
 
-#### AI Responses
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/decisions/:id/responses` | Add an AI model's response |
-| GET | `/api/decisions/:id/responses` | Get all responses for a decision |
+### Manual Decision System
 
-#### Consensus
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/decisions/:id/consensus` | Calculate and reach consensus |
-| GET | `/api/decisions/:id/consensus` | Get consensus for a decision |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/deliberate` | POST | Create decision + auto-deliberate (one-step) |
+| `/api/decisions` | GET/POST | List or create decisions |
+| `/api/decisions/:id` | GET/PATCH/DELETE | Manage specific decision |
+| `/api/decisions/:id/deliberate` | POST | Trigger AI deliberation |
+| `/api/decisions/:id/consensus` | GET/POST | Get or calculate consensus |
 
-### Request/Response Examples
+## Environment Variables
 
-#### Create Decision
+```env
+# Required - OpenRouter API key for AI models
+AI_INTEGRATIONS_OPENROUTER_API_KEY=your_openrouter_api_key
+AI_INTEGRATIONS_OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+
+# Optional - Session secret for web app
+SESSION_SECRET=your_session_secret
+```
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- npm or yarn
+- OpenRouter API key (get one at [openrouter.ai](https://openrouter.ai))
+
+### Installation
+
 ```bash
-POST /api/decisions
-Content-Type: application/json
+# Clone the repository
+git clone https://github.com/devcubedxyz/devcubedapp.git
+cd devcubedapp
 
-{
-  "title": "Implement Dark Mode",
-  "description": "Should we add dark mode toggle functionality?",
-  "category": "feature",
-  "priority": "high",
-  "context": "Optional additional context"
-}
+# Install dependencies
+npm install
+
+# Set environment variables
+export AI_INTEGRATIONS_OPENROUTER_API_KEY="your_key_here"
+export AI_INTEGRATIONS_OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"
+
+# Start development server
+npm run dev
 ```
 
-Response (201 Created):
-```json
-{
-  "id": "uuid",
-  "title": "Implement Dark Mode",
-  "description": "Should we add dark mode toggle functionality?",
-  "category": "feature",
-  "priority": "high",
-  "status": "pending",
-  "responses": [],
-  "consensus": null,
-  "createdAt": "2026-01-14T12:00:00.000Z",
-  "updatedAt": "2026-01-14T12:00:00.000Z"
-}
-```
+The application will:
+1. Auto-generate a Solana wallet (saved to `.dev3-wallet.json`)
+2. Start the autonomous engine with 30-second cycles
+3. Begin AI deliberation immediately
 
-#### Add AI Response
+Access the dashboard at `http://localhost:5000`
+
+### Production Build
+
 ```bash
-POST /api/decisions/:id/responses
-Content-Type: application/json
+# Build for production
+npm run build
 
-{
-  "model": "grok",
-  "vote": "approve",
-  "reasoning": "High momentum opportunity with strong user demand.",
-  "confidence": 92,
-  "risks": ["Complexity increase", "Testing overhead"],
-  "recommendations": ["Use CSS variables", "Add system preference detection"]
-}
+# Start production server
+npm start
 ```
 
-Response (201 Created):
+## Wallet Management
+
+On first startup, the system automatically generates a new Solana keypair:
+
 ```json
 {
-  "id": "uuid",
-  "decisionId": "decision-uuid",
-  "model": "grok",
-  "vote": "approve",
-  "reasoning": "High momentum opportunity with strong user demand.",
-  "confidence": 92,
-  "risks": ["Complexity increase", "Testing overhead"],
-  "recommendations": ["Use CSS variables", "Add system preference detection"],
-  "createdAt": "2026-01-14T12:01:00.000Z"
+  "publicKey": "HYjK6mTnWF5RmWjebSyW4WMhyLg1PbFtC8DzBHt9b925",
+  "secretKey": [...]
 }
 ```
 
-#### Reach Consensus
-```bash
-POST /api/decisions/:id/consensus
+This wallet is used for:
+- Receiving SOL for treasury operations
+- Executing buyback/sell transactions
+- Holding the managed token
+- Paying transaction fees
+
+**Important:** Back up your `.dev3-wallet.json` file securely. Loss of this file means loss of access to funds.
+
+## PumpPortal Integration
+
+Dev³ integrates with PumpPortal for Solana token operations:
+
+| Operation | API Endpoint |
+|-----------|--------------|
+| Trading (Buy/Sell) | [pumpportal.fun/trading-api](https://pumpportal.fun/trading-api/) |
+| Creator Fee Claims | [pumpportal.fun/creator-fee](https://pumpportal.fun/creator-fee/) |
+
+Transactions are signed locally using the auto-generated wallet and submitted through PumpPortal's infrastructure.
+
+## Security Considerations
+
+- Private keys never leave the server environment
+- All API keys stored as environment variables (never in code)
+- No external access to wallet signing functions
+- Immutable activity logging for complete audit trail
+- 2/3 consensus required for any action execution
+
+## Example Decision Flow
+
+```
+[Cycle Start] 14:30:00
+├── Context: 1.5 SOL balance, 10000 tokens held
+├── Market: Token price $0.0001, 24h volume $50k
+│
+├── Grok Analysis:
+│   └── Vote: BUYBACK (85% confidence)
+│   └── Reason: "Strong momentum, price consolidating above support"
+│
+├── ChatGPT Analysis:
+│   └── Vote: BUYBACK (78% confidence)
+│   └── Reason: "Technical indicators suggest accumulation phase"
+│
+├── Claude Analysis:
+│   └── Vote: HOLD (72% confidence)
+│   └── Reason: "Prefer caution, suggest smaller position"
+│
+├── Consensus: BUYBACK (2/3 approve)
+├── Execution: Buy 0.1 SOL worth of tokens via PumpPortal
+└── Result: Success - acquired 1000 tokens
 ```
 
-Response (201 Created):
-```json
-{
-  "id": "uuid",
-  "decisionId": "decision-uuid",
-  "outcome": "approved",
-  "unanimity": true,
-  "voteSummary": {
-    "approve": 3,
-    "reject": 0,
-    "abstain": 0
-  },
-  "synthesizedReasoning": "Combined reasoning from all AI models...",
-  "actionItems": ["Merged recommendations from all models"],
-  "createdAt": "2026-01-14T12:02:00.000Z"
-}
-```
+## Contributing
 
-### Enums
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-#### Categories
-- `architecture` - System architecture decisions
-- `feature` - New feature implementations
-- `refactor` - Code refactoring decisions
-- `security` - Security-related decisions
-- `performance` - Performance optimization decisions
-- `dependency` - Dependency management decisions
-- `other` - Other decisions
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-#### Priorities
-- `low` - Low priority
-- `medium` - Medium priority
-- `high` - High priority
-- `critical` - Critical priority
+## License
 
-#### Decision Status
-- `pending` - Awaiting AI responses
-- `deliberating` - All AIs have responded, awaiting consensus
-- `consensus_reached` - Final decision made
-- `deadlock` - Unable to reach consensus
+MIT License - see [LICENSE](LICENSE) file for details.
 
-#### Vote Types
-- `approve` - Approve the decision
-- `reject` - Reject the decision
-- `abstain` - Abstain from voting
+## Links
 
-#### Consensus Outcomes
-- `approved` - 2+ approve votes
-- `rejected` - 2+ reject votes
-- `needs_revision` - No clear majority
+- **Website:** [devcubed.xyz](https://devcubed.xyz)
+- **GitHub Organization:** [github.com/devcubedxyz](https://github.com/devcubedxyz)
+- **Repository:** [github.com/devcubedxyz/devcubedapp](https://github.com/devcubedxyz/devcubedapp)
 
-### Error Responses
+---
 
-All errors follow this format:
-```json
-{
-  "error": "Error type",
-  "message": "Human-readable description",
-  "details": [] // Validation errors if applicable
-}
-```
-
-Common HTTP status codes:
-- `200` - Success
-- `201` - Created
-- `204` - No Content (successful deletion)
-- `400` - Bad Request (validation error)
-- `404` - Not Found
-- `500` - Internal Server Error
-
-## System Architecture
-
-### Frontend Architecture
-- **Framework**: React with TypeScript
-- **Routing**: Wouter (lightweight React router)
-- **State Management**: TanStack React Query for server state
-- **UI Components**: shadcn/ui component library built on Radix UI primitives
-- **Styling**: Tailwind CSS with custom design tokens and CSS variables for theming
-- **Build Tool**: Vite with hot module replacement
-
-### Backend Architecture
-- **Framework**: Express.js with TypeScript
-- **Runtime**: Node.js with tsx for TypeScript execution
-- **API Pattern**: RESTful JSON API with `/api` prefix
-- **Storage**: Abstracted storage interface (IStorage) with in-memory implementation (MemStorage)
-- **Validation**: Zod schemas for request/response validation
-
-### Data Models
-
-#### Decision
-```typescript
-interface Decision {
-  id: string;
-  title: string;
-  description: string;
-  context?: string;
-  category: "architecture" | "feature" | "refactor" | "security" | "performance" | "dependency" | "other";
-  priority: "low" | "medium" | "high" | "critical";
-  status: "pending" | "deliberating" | "consensus_reached" | "deadlock";
-  responses?: AIResponse[];
-  consensus?: Consensus | null;
-  createdAt: string;
-  updatedAt: string;
-}
-```
-
-#### AIResponse
-```typescript
-interface AIResponse {
-  id: string;
-  decisionId: string;
-  model: "grok" | "chatgpt" | "claude";
-  vote: "approve" | "reject" | "abstain";
-  reasoning: string;
-  confidence: number; // 0-100
-  risks?: string[];
-  recommendations?: string[];
-  createdAt: string;
-}
-```
-
-#### Consensus
-```typescript
-interface Consensus {
-  id: string;
-  decisionId: string;
-  outcome: "approved" | "rejected" | "needs_revision";
-  unanimity: boolean;
-  voteSummary: {
-    approve: number;
-    reject: number;
-    abstain: number;
-  };
-  synthesizedReasoning: string;
-  actionItems?: string[];
-  createdAt: string;
-}
-```
-
-### Project Structure
-```
-├── client/           # React frontend
-│   └── src/
-│       ├── components/ui/  # shadcn/ui components
-│       ├── hooks/          # Custom React hooks
-│       ├── lib/            # Utilities and query client
-│       └── pages/          # Route components
-├── server/           # Express backend
-│   ├── index.ts      # Server entry point
-│   ├── routes.ts     # API route definitions (documented with JSDoc)
-│   ├── storage.ts    # Data persistence layer (IStorage interface)
-│   └── vite.ts       # Vite dev server integration
-├── shared/           # Shared types and schemas
-│   └── schema.ts     # Zod schemas and TypeScript types
-└── script/           # Build scripts
-```
-
-### Design System
-The project follows a hybrid design approach inspired by Linear, Stripe, and Web3 aesthetics (Uniswap, Rainbow):
-- Typography: Inter for headings/body, JetBrains Mono for code
-- Dark mode support via CSS class toggle
-- Custom color palette with primary purple accent
-- Consistent spacing using Tailwind's scale
-
-## Decision Workflow
-
-1. **Create Decision** - Submit a decision request with title, description, category, and priority
-2. **AI Responses** - Each of the three AI models (Grok, ChatGPT, Claude) submits their response
-3. **Status Update** - Once all three models respond, status changes to "deliberating"
-4. **Reach Consensus** - Calculate the final outcome based on majority voting
-5. **Action Items** - Synthesize recommendations from all models into actionable items
-
-## External Dependencies
-
-### Backend Libraries
-- **Express.js**: Web framework
-- **Zod**: Runtime type validation
-- **crypto (Node.js built-in)**: UUID generation
-
-### Frontend Libraries
-- **Radix UI**: Accessible component primitives
-- **TanStack Query**: Data fetching and caching
-- **React Hook Form**: Form handling with Zod resolver
-- **Recharts**: Charting library
-- **date-fns**: Date manipulation
-
-### Development Tools
-- **Vite**: Frontend build and dev server
-- **esbuild**: Server bundling for production
-- **tsx**: TypeScript execution for Node.js
+*Built with autonomous intelligence. Operated by consensus. Trusted by code.*

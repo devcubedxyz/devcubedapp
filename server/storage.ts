@@ -15,6 +15,8 @@ import {
   type AIResponse,
   type InsertAIResponse,
   type Consensus,
+  type ActivityLog,
+  type ActivityType,
   AI_MODELS,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
@@ -91,6 +93,12 @@ export interface IStorage {
    * @returns The consensus if exists, undefined otherwise
    */
   getConsensus(decisionId: string): Promise<Consensus | undefined>;
+
+  /**
+   * Gets all activity logs (system-generated, immutable)
+   * @returns Array of activity logs sorted by timestamp (newest first)
+   */
+  getActivityLogs(): Promise<ActivityLog[]>;
 }
 
 /**
@@ -105,11 +113,32 @@ export class MemStorage implements IStorage {
   private decisions: Map<string, Decision>;
   private aiResponses: Map<string, AIResponse[]>;
   private consensuses: Map<string, Consensus>;
+  private activityLogs: ActivityLog[];
 
   constructor() {
     this.decisions = new Map();
     this.aiResponses = new Map();
     this.consensuses = new Map();
+    this.activityLogs = [];
+  }
+
+  private logActivity(
+    type: ActivityType,
+    decisionId?: string,
+    decisionTitle?: string,
+    outcome?: string,
+    metadata?: Record<string, unknown>
+  ): void {
+    const log: ActivityLog = {
+      id: randomUUID(),
+      type,
+      decisionId,
+      decisionTitle,
+      outcome,
+      metadata,
+      timestamp: new Date().toISOString(),
+    };
+    this.activityLogs.push(log);
   }
 
   async createDecision(insertDecision: InsertDecision): Promise<Decision> {
@@ -126,6 +155,12 @@ export class MemStorage implements IStorage {
     };
     this.decisions.set(id, decision);
     this.aiResponses.set(id, []);
+    
+    this.logActivity("decision_created", id, decision.title, undefined, {
+      category: decision.category,
+      priority: decision.priority,
+    });
+    
     return decision;
   }
 
@@ -182,7 +217,13 @@ export class MemStorage implements IStorage {
   }
 
   async deleteDecision(id: string): Promise<boolean> {
+    const decision = this.decisions.get(id);
     const existed = this.decisions.has(id);
+    
+    if (existed && decision) {
+      this.logActivity("decision_deleted", id, decision.title);
+    }
+    
     this.decisions.delete(id);
     this.aiResponses.delete(id);
     this.consensuses.delete(id);
@@ -219,6 +260,8 @@ export class MemStorage implements IStorage {
         decision.status = "deliberating";
         decision.updatedAt = new Date().toISOString();
         this.decisions.set(insertResponse.decisionId, decision);
+        
+        this.logActivity("deliberation_started", decision.id, decision.title);
       }
     }
     
@@ -251,11 +294,33 @@ export class MemStorage implements IStorage {
     decision.updatedAt = new Date().toISOString();
     this.decisions.set(decisionId, decision);
     
+    // Log the deliberation outcome
+    this.logActivity("deliberation_completed", decisionId, decision.title, consensus.outcome, {
+      unanimity: consensus.unanimity,
+      votes: consensus.voteSummary,
+    });
+    
+    // Log specific consensus outcome
+    const outcomeType = consensus.outcome === "approved" 
+      ? "consensus_approved" 
+      : consensus.outcome === "rejected" 
+        ? "consensus_rejected" 
+        : "consensus_needs_revision";
+    this.logActivity(outcomeType, decisionId, decision.title, consensus.outcome, {
+      unanimity: consensus.unanimity,
+    });
+    
     return consensus;
   }
 
   async getConsensus(decisionId: string): Promise<Consensus | undefined> {
     return this.consensuses.get(decisionId);
+  }
+
+  async getActivityLogs(): Promise<ActivityLog[]> {
+    return [...this.activityLogs].sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
   }
 }
 
